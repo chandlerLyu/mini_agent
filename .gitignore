@@ -1,4 +1,3 @@
 data/
-tests/
+.pycache/
 __pycache__/
-
