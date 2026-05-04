@@ -24,6 +24,13 @@ class EnvironmentToolTests(unittest.TestCase):
             search = env.execute(ToolCall(id="3", name="search", arguments={"query": "alp"}))
             self.assertIn("a.txt", search.output)
 
+    def test_demo_repo_relative_paths_work_with_demo_repo_cwd(self) -> None:
+        demo_root = Path(__file__).resolve().parent.parent / "demo_repo"
+        env = LocalEnvironment(EnvironmentConfig(cwd=demo_root))
+        result = env.execute(ToolCall(id="1", name="read_file", arguments={"path": "calculator.py"}))
+        self.assertTrue(result.success)
+        self.assertIn("def divide", result.output)
+
     def test_bash_failure_becomes_tool_result(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             env = LocalEnvironment(EnvironmentConfig(cwd=Path(tmp)))

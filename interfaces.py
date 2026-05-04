@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -14,6 +15,16 @@ class ToolCall:
 
     def to_dict(self) -> dict[str, Any]:
         return {"id": self.id, "name": self.name, "arguments": self.arguments}
+
+    def to_model_tool_call(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "arguments": json.dumps(self.arguments),
+            },
+        }
 
 
 @dataclass
@@ -63,6 +74,8 @@ class Message:
 
     def to_model_message(self) -> dict[str, Any]:
         payload = {"role": self.role, "content": self.content}
+        if self.role == "assistant" and self.tool_calls:
+            payload["tool_calls"] = [tool_call.to_model_tool_call() for tool_call in self.tool_calls]
         if self.role == "tool" and self.tool_call_id:
             payload["tool_call_id"] = self.tool_call_id
             payload["name"] = self.name

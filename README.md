@@ -21,6 +21,9 @@ pip install litellm
 python -m run.cli local --model openai/gpt-4.1-mini --task "Read README.md and summarize the project"
 ```
 
+When you use the default `--cwd demo_repo`, refer to files inside that directory directly, for example
+`calculator.py` rather than `demo_repo/calculator.py`.
+
 List bundled demo tasks:
 
 ```bash

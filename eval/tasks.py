@@ -3,14 +3,14 @@
 DEMO_TASKS = [
     {
         "id": "fix-calculator",
-        "task": "Find and fix the bug in demo_repo/calculator.py so divide(8, 2) returns 4.",
+        "task": "Find and fix the bug in calculator.py so divide(8, 2) returns 4.",
     },
     {
         "id": "summarize-greet",
-        "task": "Read demo_repo/app.py and explain what greet() does.",
+        "task": "Read app.py and explain what greet() does.",
     },
     {
         "id": "edit-greeting",
-        "task": "Modify demo_repo/app.py so greet('Ada') returns 'Hello, Ada!'.",
+        "task": "Modify app.py so greet('Ada') returns 'Hello, Ada!'.",
     },
 ]

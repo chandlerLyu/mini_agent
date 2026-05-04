@@ -19,6 +19,18 @@ class ModelAndTrajectoryTests(unittest.TestCase):
         self.assertEqual(message.role, "assistant")
         self.assertEqual(message.tool_calls[0].name, "list_files")
 
+    def test_assistant_tool_calls_are_replayed_in_provider_format(self) -> None:
+        message = Message(
+            role="assistant",
+            content="",
+            tool_calls=[ToolCall(id="call_1", name="read_file", arguments={"path": "calculator.py"})],
+        )
+        payload = message.to_model_message()
+        self.assertIn("tool_calls", payload)
+        self.assertEqual(payload["tool_calls"][0]["id"], "call_1")
+        self.assertEqual(payload["tool_calls"][0]["function"]["name"], "read_file")
+        self.assertEqual(payload["tool_calls"][0]["function"]["arguments"], '{"path": "calculator.py"}')
+
     def test_trajectory_contains_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = TrajectoryStore()
