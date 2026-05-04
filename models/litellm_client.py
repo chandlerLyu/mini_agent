@@ -44,8 +44,15 @@ class LiteLLMModel(ModelClient):
         raw_tool_calls = getattr(choice, "tool_calls", None) or []
         tool_calls = [self._convert_tool_call(tool_call) for tool_call in raw_tool_calls]
         content = getattr(choice, "content", "") or ""
+        reasoning_content = getattr(choice, "reasoning_content", None)
         cost = self._extract_cost(response)
-        return Message(role="assistant", content=content, tool_calls=tool_calls, metadata={"cost": cost})
+        return Message(
+            role="assistant",
+            content=content,
+            tool_calls=tool_calls,
+            reasoning_content=reasoning_content,
+            metadata={"cost": cost},
+        )
 
     def _convert_tool_call(self, tool_call: Any) -> ToolCall:
         function = getattr(tool_call, "function", None)

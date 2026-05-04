@@ -51,6 +51,7 @@ class Message:
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_call_id: str | None = None
     name: str | None = None
+    reasoning_content: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -70,12 +71,16 @@ class Message:
             data["tool_call_id"] = self.tool_call_id
         if self.name is not None:
             data["name"] = self.name
+        if self.reasoning_content is not None:
+            data["reasoning_content"] = self.reasoning_content
         return data
 
     def to_model_message(self) -> dict[str, Any]:
         payload = {"role": self.role, "content": self.content}
         if self.role == "assistant" and self.tool_calls:
             payload["tool_calls"] = [tool_call.to_model_tool_call() for tool_call in self.tool_calls]
+        if self.role == "assistant" and self.reasoning_content is not None:
+            payload["reasoning_content"] = self.reasoning_content
         if self.role == "tool" and self.tool_call_id:
             payload["tool_call_id"] = self.tool_call_id
             payload["name"] = self.name

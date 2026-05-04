@@ -31,6 +31,16 @@ class ModelAndTrajectoryTests(unittest.TestCase):
         self.assertEqual(payload["tool_calls"][0]["function"]["name"], "read_file")
         self.assertEqual(payload["tool_calls"][0]["function"]["arguments"], '{"path": "calculator.py"}')
 
+    def test_reasoning_content_is_replayed_for_assistant_messages(self) -> None:
+        message = Message(
+            role="assistant",
+            content="",
+            tool_calls=[ToolCall(id="call_1", name="read_file", arguments={"path": "calculator.py"})],
+            reasoning_content="I should inspect the file before editing it.",
+        )
+        payload = message.to_model_message()
+        self.assertEqual(payload["reasoning_content"], "I should inspect the file before editing it.")
+
     def test_trajectory_contains_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = TrajectoryStore()
