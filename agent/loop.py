@@ -8,8 +8,8 @@ from pathlib import Path
 from agent.hooks import HookManager
 from agent.state import AgentState
 from config import AppConfig
-from exceptions import AgentInterrupt, FormatError, LimitsExceeded, Submitted
-from interfaces import AgentRunResult, Message, ModelClient
+from exceptions import AgentInterrupt, HookBlocked, LimitsExceeded, Submitted
+from interfaces import AgentRunResult, Message, ModelClient, ToolResult
 from trajectory.store import TrajectoryStore
 
 
@@ -112,8 +112,19 @@ class AgentLoop:
         state.latest_actions = list(assistant_message.tool_calls)
 
         for tool_call in assistant_message.tool_calls:
-            self.hooks.emit("pre_tool_execution", state=state, loop=self, tool_call=tool_call)
-            result = self.environment.execute(tool_call)
+            try:
+                self.hooks.emit("pre_tool_execution", state=state, loop=self, tool_call=tool_call)
+                result = self.environment.execute(tool_call)
+            except HookBlocked as exc:
+                result = ToolResult(
+                    tool_name=tool_call.name,
+                    tool_call_id=tool_call.id,
+                    success=False,
+                    output="",
+                    return_code=-1,
+                    error=exc.reason,
+                    metadata={"error_type": type(exc).__name__, "blocked_by_hook": True},
+                )
             observation = Message.tool_observation(
                 tool_name=result.tool_name,
                 tool_call_id=result.tool_call_id,

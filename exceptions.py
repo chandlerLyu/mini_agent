@@ -33,5 +33,12 @@ class ExecutionError(Exception):
         super().__init__(message)
 
 
+class HookBlocked(Exception):
+    def __init__(self, tool_name: str, reason: str) -> None:
+        self.tool_name = tool_name
+        self.reason = reason
+        super().__init__(reason)
+
+
 class UserInterrupt(AgentInterrupt):
     pass

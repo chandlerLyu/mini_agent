@@ -67,6 +67,37 @@ class AgentLoopTests(unittest.TestCase):
             payload = config.agent.trajectory_path.read_text(encoding="utf-8")
             self.assertIn("Format error", payload)
 
+    def test_pre_tool_hook_blocks_rm_rf(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "keep.txt").write_text("safe", encoding="utf-8")
+            config = AppConfig()
+            config.environment.cwd = root
+            config.agent.trajectory_path = root / "traj.json"
+
+            model = DeterministicModel(
+                [
+                    Message(
+                        role="assistant",
+                        content="Delete everything.",
+                        tool_calls=[ToolCall(id="1", name="bash", arguments={"command": "rm -rf ./*"})],
+                    ),
+                    Message(role="assistant", content="<final_answer>Blocked and continued.</final_answer>"),
+                ]
+            )
+
+            result = AgentLoop(
+                model=model,
+                environment=LocalEnvironment(config.environment),
+                config=config,
+            ).run("Try something destructive.")
+
+            self.assertEqual(result.status, "submitted")
+            self.assertTrue((root / "keep.txt").exists())
+            payload = config.agent.trajectory_path.read_text(encoding="utf-8")
+            self.assertIn("Blocked destructive bash command", payload)
+            self.assertIn("blocked_by_hook", payload)
+
 
 if __name__ == "__main__":
     unittest.main()
