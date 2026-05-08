@@ -11,9 +11,32 @@ dependencies = []
 
 [project.optional-dependencies]
 llm = ["litellm>=1.75.5"]
+principles = [
+    "faiss-cpu>=1.13.0",
+    "numpy>=1.26",
+    "pydantic>=2.0",
+    "pypdf>=6.0",
+    "sentence-transformers>=5.0",
+    "tiktoken>=0.12",
+]
 
 [project.scripts]
 run = "run.cli:main"
+ingest-corpus = "scripts.ingest_corpus:main"
+extract-principles = "scripts.extract_principles:main"
 
 [tool.setuptools]
-packages = ["agent", "config", "environment", "eval", "models", "prompts", "run", "tools", "trajectory", "utils"]
+packages = [
+    "agent",
+    "config",
+    "environment",
+    "eval",
+    "models",
+    "principles",
+    "prompts",
+    "run",
+    "scripts",
+    "tools",
+    "trajectory",
+    "utils",
+]

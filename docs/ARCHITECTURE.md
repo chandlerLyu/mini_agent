@@ -27,3 +27,7 @@ V1 only supports local execution. `bash` uses `subprocess.run`, while file-orien
 ## Hooks and future skills
 
 `HookManager` provides lifecycle events such as `pre_run`, `pre_model_call`, `post_tool_execution`, and `on_finish`. Skills are intentionally not implemented yet, but the hook and prompt boundaries are where they should attach later.
+
+## PrincipleRAG memory pipeline
+
+`principles/` contains the first offline PrincipleRAG milestone. It loads `.txt`, `.md`, and text-based `.pdf` files, chunks them with source metadata, writes JSONL records, builds a FAISS raw chunk index with local sentence-transformer embeddings, and extracts candidate principles through the existing `ModelClient` interface. Verified principle memory, SQLite metadata, principle retrieval, and answer-time memory updates are intentionally left for later milestones.

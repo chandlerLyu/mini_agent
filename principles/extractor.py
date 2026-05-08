@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 
+from pydantic import ValidationError
+
 from config import ModelConfig
 from interfaces import Message, ModelClient
 from principles.schema import Evidence, PrincipleCandidate
@@ -13,6 +15,16 @@ from principles.schema import Evidence, PrincipleCandidate
 EXTRACT_SYSTEM_PROMPT = """You extract reusable principles from source text.
 
 A principle is not a summary. It must be a general, actionable rule that can guide future reasoning beyond the passage.
+
+Consider the following 6 questions when extracting:
+
+1. What reusable principle is implied by this text?
+2. Is it general enough to apply beyond this passage?
+3. When should it be applied?
+4. How should it be applied?
+5. When might it fail?
+6. What source evidence supports it?
+
 Return strict JSON only with this shape:
 {"principles":[{"name":"...","domain":"...","summary":"...","when_to_apply":["..."],"how_to_apply":["..."],"failure_modes":["..."],"confidence":0.0}]}
 Do not include markdown fences.
@@ -33,7 +45,8 @@ def extract_principles_from_chunk(
             role="user",
             content=(
                 "Extract candidate principles from this chunk. "
-                "Each candidate must be reusable, actionable, evidence-grounded, and include failure modes.\n\n"
+                "Each candidate must be reusable, actionable, evidence-grounded, and include failure modes. "
+                'If the chunk does not contain any reusable candidate principle, return {"principles":[]}.\n\n'
                 f"source_file: {chunk.source_file}\n"
                 f"chunk_id: {chunk.chunk_id}\n"
                 f"page: {chunk.page}\n\n"
@@ -52,11 +65,14 @@ def extract_principles_from_chunk(
     for offset, item in enumerate(raw_principles, start=start_index):
         if not isinstance(item, dict):
             continue
-        candidate_payload = dict(item)
+        candidate_payload = _normalize_candidate_payload(item)
         candidate_payload["principle_id"] = f"{id_prefix}{offset:04d}"
         candidate_payload["status"] = "candidate"
         candidate_payload["evidence"] = [evidence.model_dump()]
-        candidates.append(PrincipleCandidate.model_validate(candidate_payload))
+        try:
+            candidates.append(PrincipleCandidate.model_validate(candidate_payload))
+        except ValidationError:
+            continue
     return candidates
 
 
@@ -105,6 +121,23 @@ def _parse_json_object(text: str) -> dict:
         raise ValueError("extractor response was not valid JSON") from exc
     if not isinstance(payload, dict):
         raise ValueError("extractor response must be a JSON object")
+    return payload
+
+
+def _normalize_candidate_payload(item: dict) -> dict:
+    allowed_keys = {
+        "name",
+        "domain",
+        "summary",
+        "when_to_apply",
+        "how_to_apply",
+        "failure_modes",
+        "confidence",
+    }
+    payload = {key: item[key] for key in allowed_keys if key in item}
+    for key in ["when_to_apply", "how_to_apply", "failure_modes"]:
+        if isinstance(payload.get(key), str):
+            payload[key] = [payload[key]]
     return payload
 
 

@@ -1,3 +1,7 @@
 data/
 .pycache/
 __pycache__/
+corpus/
+semantic_model/
+corpus_embedding/
+memory/

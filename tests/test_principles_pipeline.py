@@ -14,6 +14,7 @@ from principles.jsonl import read_jsonl, write_jsonl
 from principles.loaders import load_corpus, load_document
 from principles.schema import Chunk, PrincipleCandidate
 from principles.vector_store import FaissChunkIndex
+from scripts.extract_principles import _extract_with_progress
 
 
 class PrinciplesPipelineTests(unittest.TestCase):
@@ -127,6 +128,180 @@ class PrinciplesPipelineTests(unittest.TestCase):
         self.assertEqual(candidates[0].principle_id, "P0001")
         self.assertEqual(candidates[0].status, "candidate")
         self.assertEqual(candidates[0].evidence[0].chunk_id, "c1")
+
+    def test_extractor_allows_chunks_with_no_candidate_principles(self) -> None:
+        chunks = [Chunk(chunk_id="c1", source_file="appendix.txt", text="Appendix A. Index and page references.")]
+        model = DeterministicModel([Message(role="assistant", content='{"principles":[]}')])
+
+        candidates = extract_principles_from_chunks(chunks=chunks, model=model, config=ModelConfig())
+
+        self.assertEqual(candidates, [])
+
+    def test_extractor_ignores_extra_model_fields(self) -> None:
+        chunks = [Chunk(chunk_id="c1", source_file="a.txt", text="Principles require boundary conditions.")]
+        model = DeterministicModel(
+            [
+                Message(
+                    role="assistant",
+                    content=(
+                        '{"principles":[{"name":"Check boundaries","domain":"general_reasoning",'
+                        '"summary":"Before applying a principle, identify the conditions where it stops working.",'
+                        '"when_to_apply":["using abstract rules"],'
+                        '"how_to_apply":["state the boundary condition"],'
+                        '"failure_modes":["over-applying the rule"],'
+                        '"source_evidence":"extra text the model should not put here",'
+                        '"confidence":0.74}]}'
+                    ),
+                )
+            ]
+        )
+
+        candidates = extract_principles_from_chunks(chunks=chunks, model=model, config=ModelConfig())
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].name, "Check boundaries")
+
+    def test_extract_cli_helper_records_bad_chunk_response_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            chunks = [
+                Chunk(chunk_id="bad", source_file="a.txt", text="bad response"),
+                Chunk(chunk_id="good", source_file="b.txt", text="good response"),
+            ]
+            model = DeterministicModel(
+                [
+                    Message(role="assistant", content="not json"),
+                    Message(
+                        role="assistant",
+                        content=(
+                            '{"principles":[{"name":"Use evidence","domain":"general_reasoning",'
+                            '"summary":"Ground reusable rules in the source that supports them.",'
+                            '"when_to_apply":["extracting rules from text"],'
+                            '"how_to_apply":["attach source evidence"],'
+                            '"failure_modes":["inventing unsupported rules"],'
+                            '"confidence":0.8}]}'
+                        ),
+                    ),
+                ]
+            )
+
+            errors_path = Path(tmp) / "errors.jsonl"
+            output_path = Path(tmp) / "candidates.jsonl"
+            candidates = _extract_with_progress(
+                chunks=chunks,
+                model=model,
+                config=ModelConfig(),
+                verbose=False,
+                progress_every=1,
+                errors_output=errors_path,
+                output_path=output_path,
+            )
+
+            self.assertEqual(len(candidates), 1)
+            self.assertIn('"chunk_id": "bad"', errors_path.read_text(encoding="utf-8"))
+            self.assertIn('"principle_id":"P0001"', output_path.read_text(encoding="utf-8"))
+
+    def test_extract_cli_helper_resumes_from_absolute_chunk_number(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            chunks = [
+                Chunk(chunk_id="old", source_file="a.txt", text="already processed"),
+                Chunk(chunk_id="new", source_file="b.txt", text="resume here"),
+            ]
+            existing = [
+                PrincipleCandidate.model_validate(
+                    {
+                        "principle_id": "P0001",
+                        "name": "Existing principle",
+                        "domain": "general_reasoning",
+                        "summary": "Existing extracted principle.",
+                        "when_to_apply": ["before resume"],
+                        "how_to_apply": ["keep it"],
+                        "failure_modes": ["duplicating it"],
+                        "evidence": [{"source_file": "a.txt", "chunk_id": "old"}],
+                        "confidence": 0.7,
+                    }
+                )
+            ]
+            model = DeterministicModel(
+                [
+                    Message(
+                        role="assistant",
+                        content=(
+                            '{"principles":[{"name":"Resume carefully","domain":"general_reasoning",'
+                            '"summary":"When resuming batch work, preserve existing outputs and continue numbering.",'
+                            '"when_to_apply":["resuming an interrupted extraction"],'
+                            '"how_to_apply":["load previous output","start from the failed chunk"],'
+                            '"failure_modes":["overwriting previous output"],'
+                            '"confidence":0.86}]}'
+                        ),
+                    )
+                ]
+            )
+
+            output_path = Path(tmp) / "candidates.jsonl"
+            errors_path = Path(tmp) / "errors.jsonl"
+            candidates = _extract_with_progress(
+                chunks=chunks[1:],
+                model=model,
+                config=ModelConfig(),
+                verbose=False,
+                progress_every=1,
+                errors_output=errors_path,
+                output_path=output_path,
+                initial_candidates=existing,
+                start_chunk_number=2,
+                total_chunks=2,
+            )
+
+            self.assertEqual([candidate.principle_id for candidate in candidates], ["P0001", "P0002"])
+
+    def test_extract_cli_helper_appends_after_existing_candidates_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            existing = [
+                PrincipleCandidate.model_validate(
+                    {
+                        "principle_id": "P0001",
+                        "name": "Existing principle",
+                        "domain": "general_reasoning",
+                        "summary": "Existing extracted principle.",
+                        "when_to_apply": ["continuing a previous run"],
+                        "how_to_apply": ["load previous output first"],
+                        "failure_modes": ["accidentally deleting prior candidates"],
+                        "evidence": [{"source_file": "a.txt", "chunk_id": "old"}],
+                        "confidence": 0.7,
+                    }
+                )
+            ]
+            model = DeterministicModel(
+                [
+                    Message(
+                        role="assistant",
+                        content=(
+                            '{"principles":[{"name":"Append new candidates","domain":"general_reasoning",'
+                            '"summary":"When output already exists, new extraction should append after prior candidates.",'
+                            '"when_to_apply":["rerunning extraction"],'
+                            '"how_to_apply":["preserve existing output","continue IDs after the last candidate"],'
+                            '"failure_modes":["overwriting useful work"],'
+                            '"confidence":0.9}]}'
+                        ),
+                    )
+                ]
+            )
+
+            output_path = Path(tmp) / "candidates.jsonl"
+            write_jsonl(output_path, existing)
+            candidates = _extract_with_progress(
+                chunks=[Chunk(chunk_id="new", source_file="b.txt", text="append here")],
+                model=model,
+                config=ModelConfig(),
+                verbose=False,
+                progress_every=1,
+                errors_output=Path(tmp) / "errors.jsonl",
+                output_path=output_path,
+                initial_candidates=read_jsonl(output_path, PrincipleCandidate),
+            )
+
+            self.assertEqual([candidate.principle_id for candidate in candidates], ["P0001", "P0002"])
+            self.assertEqual(len(read_jsonl(output_path, PrincipleCandidate)), 2)
 
 
 if __name__ == "__main__":

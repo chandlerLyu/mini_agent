@@ -30,6 +30,18 @@ List bundled demo tasks:
 python -m run.cli demo --list
 ```
 
+## PrincipleRAG milestone
+
+The first PrincipleRAG milestone adds an offline memory pipeline:
+
+```bash
+conda activate other
+python scripts/ingest_corpus.py --input_dir data/raw --output data/processed/chunks.jsonl
+python scripts/extract_principles.py --chunks data/processed/chunks.jsonl --output memory/principles_candidates.jsonl --model openai/gpt-4.1-mini
+```
+
+Ingestion stores raw chunks as JSONL and builds a FAISS raw-corpus index. Extraction uses the existing `ModelClient` abstraction to produce candidate principles with source evidence; verification and agent-time principle retrieval are later milestones.
+
 ## Architecture
 
 See [docs/ARCHITECTURE.md](/Users/qchd/coding_project/mini_agent/my_agent/docs/ARCHITECTURE.md).
