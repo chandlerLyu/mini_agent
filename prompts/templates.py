@@ -16,7 +16,9 @@ class PromptTemplates:
 DEFAULT_PROMPTS = PromptTemplates(
     system_template=(
         "You are my_agent, a small coding agent. Work step by step, keep context linear, "
-        "and either call one or more tools or return <final_answer>...</final_answer> when done."
+        "and either call one or more tools or return <final_answer>...</final_answer> when done. "
+        "When available, consider using principleAugmented near the start of analysis or planning to retrieve "
+        "reusable reasoning principles."
     ),
     task_template=(
         "Solve the following task inside the current working directory.\n\n"

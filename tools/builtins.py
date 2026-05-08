@@ -8,7 +8,8 @@ from pathlib import Path
 
 from config import EnvironmentConfig
 from exceptions import ExecutionError
-from interfaces import ToolCall, ToolDefinition
+from interfaces import ToolCall, ToolDefinition, ToolResult
+from principles.memory_store import PrincipleMemoryStore, PrincipleSearchResult
 from tools.base import BaseTool
 
 
@@ -153,3 +154,122 @@ class ListFilesTool(BaseTool):
             items = sorted(str(path.relative_to(environment_config.cwd.resolve())) for path in base.iterdir())
         output = "\n".join(items) if items else "(empty)"
         return self.result(action=action, output=output, success=True, return_code=0)
+
+
+class PrincipleAugmentedTool(BaseTool):
+    definition = ToolDefinition(
+        name="principleAugmented",
+        description=(
+            "Retrieve verified reusable principles to guide reasoning. Strongly consider using this tool near the "
+            "start of a task, while analyzing a problem, planning an implementation, making a design decision, or "
+            "debugging complex behavior. Use the returned principles as reasoning constraints only when they are "
+            "strongly correlated with the current situation; ignore weakly related principles."
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Natural-language description of the current task, situation, plan, or decision.",
+                }
+            },
+            "required": ["query"],
+        },
+    )
+
+    def execute(self, action: ToolCall, environment_config: EnvironmentConfig):
+        missing_paths = [
+            path
+            for path in [
+                environment_config.principle_sqlite_path,
+                environment_config.principle_index_path,
+                environment_config.principle_metadata_path,
+            ]
+            if not path.exists()
+        ]
+        if missing_paths:
+            missing = ", ".join(str(path) for path in missing_paths)
+            return ToolResult(
+                tool_name=self.definition.name,
+                tool_call_id=action.id,
+                success=False,
+                output="",
+                return_code=-1,
+                error=(
+                    "Principle memory artifacts are missing. Run scripts/build_principle_memory.py first. "
+                    f"Missing: {missing}"
+                ),
+                metadata={"error_type": "MissingPrincipleMemory"},
+            )
+
+        from principles.embeddings import SentenceTransformerEmbedding
+
+        query = action.arguments["query"]
+        embeddings = SentenceTransformerEmbedding(environment_config.principle_embedding_model)
+        store = PrincipleMemoryStore.load(
+            sqlite_path=environment_config.principle_sqlite_path,
+            index_path=environment_config.principle_index_path,
+            metadata_path=environment_config.principle_metadata_path,
+            embedding_model=embeddings,
+        )
+        results = store.retrieve_principles(
+            query,
+            top_k=environment_config.principle_top_k,
+            min_confidence=environment_config.principle_min_confidence,
+            status=environment_config.principle_status,
+        )
+        output = _format_principle_augmented_prompt(query, results)
+        return self.result(action=action, output=output, success=True, return_code=0)
+
+
+def _format_principle_augmented_prompt(query: str, results: list[PrincipleSearchResult]) -> str:
+    if not results:
+        return (
+            f"User query:\n{query}\n\n"
+            "Relevant principles:\nNo relevant principles found.\n\n"
+            "Instruction:\nProceed without principle constraints from memory for this query."
+        )
+
+    lines = [
+        "User query:",
+        query,
+        "",
+        "Relevant principles:",
+    ]
+    for result in results:
+        principle = result.principle
+        lines.extend(
+            [
+                f"- {principle.principle_id}: {principle.name}",
+                f"  Domain: {principle.domain}",
+                f"  Confidence: {principle.confidence:.2f}",
+                f"  Retrieval score: {result.score:.4f}",
+                f"  Summary: {principle.summary}",
+                f"  When to apply: {_format_list(principle.when_to_apply)}",
+                f"  How to apply: {_format_list(principle.how_to_apply)}",
+                f"  Failure modes: {_format_list(principle.failure_modes)}",
+                f"  Evidence: {_format_evidence(principle.evidence)}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "Instruction:",
+            "Use these principles as reasoning constraints, not as decorations.",
+            "First decide whether each principle is strongly correlated with the current situation.",
+            "If a principle is weakly related, ignore it and say it was ignored because relevance was weak.",
+            "For each major claim or decision, explain which strongly relevant principle supports it.",
+            "Mention when the principle may not apply.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _format_list(items: list[str]) -> str:
+    return "; ".join(items)
+
+
+def _format_evidence(items) -> str:
+    return "; ".join(
+        f"source_file={item.source_file}, chunk_id={item.chunk_id}, page={item.page}" for item in items
+    )

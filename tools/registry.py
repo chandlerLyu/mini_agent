@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from interfaces import Tool, ToolDefinition
-from tools.builtins import BashTool, ListFilesTool, ReadFileTool, SearchTool, WriteFileTool
+from tools.builtins import BashTool, ListFilesTool, PrincipleAugmentedTool, ReadFileTool, SearchTool, WriteFileTool
 
 
 @dataclass
@@ -24,6 +24,13 @@ class ToolRegistry:
 
 def build_default_registry() -> ToolRegistry:
     registry = ToolRegistry()
-    for tool in [BashTool(), ReadFileTool(), WriteFileTool(), SearchTool(), ListFilesTool()]:
+    for tool in [
+        BashTool(),
+        ReadFileTool(),
+        WriteFileTool(),
+        SearchTool(),
+        ListFilesTool(),
+        PrincipleAugmentedTool(),
+    ]:
         registry.register(tool)
     return registry

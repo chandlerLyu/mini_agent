@@ -34,6 +34,13 @@ class EnvironmentConfig:
     cwd: Path = Path(".")
     timeout: int = 30
     env: dict[str, str] = field(default_factory=dict)
+    principle_sqlite_path: Path = Path("memory/principles.sqlite")
+    principle_index_path: Path = Path("memory/principles.faiss")
+    principle_metadata_path: Path = Path("memory/principles_metadata.json")
+    principle_embedding_model: str = "semantic_model/all-MiniLM-L6-v2"
+    principle_top_k: int = 5
+    principle_min_confidence: float = 0.6
+    principle_status: str = "verified"
 
 
 @dataclass
