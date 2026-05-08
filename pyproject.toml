@@ -25,6 +25,7 @@ run = "run.cli:main"
 ingest-corpus = "scripts.ingest_corpus:main"
 extract-principles = "scripts.extract_principles:main"
 verify-principles = "scripts.verify_principles:main"
+build-principle-memory = "scripts.build_principle_memory:main"
 
 [tool.setuptools]
 packages = [
